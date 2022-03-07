@@ -8,7 +8,7 @@ use anyhow::{bail, Result};
 use crate::types::{Headers, PyFunction};
 use futures_util::stream::StreamExt;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyTuple};
+use pyo3::types::{Py, PyDict, PyTuple};
 
 use std::fs::File;
 use std::io::Read;
@@ -17,7 +17,7 @@ use std::io::Read;
 const MAX_SIZE: usize = 10_000;
 
 #[inline]
-pub fn apply_headers(response: &mut HttpResponseBuilder, headers: &Arc<Headers>) {
+pub fn apply_headers(response: &mut HttpResponseBuilder, headers: Arc<Py<PyTuple>>) {
     for a in headers.iter() {
         response.insert_header((a.key().clone(), a.value().clone()));
     }
@@ -37,7 +37,7 @@ pub fn apply_headers(response: &mut HttpResponseBuilder, headers: &Arc<Headers>)
 pub async fn handle_request(
     function: PyFunction,
     number_of_params: u8,
-    headers: &Arc<Headers>,
+    headers: Arc<Py<PyTuple>>,
     payload: &mut web::Payload,
     req: &HttpRequest,
     route_params: HashMap<String, String>,
@@ -46,7 +46,7 @@ pub async fn handle_request(
     let contents = match execute_http_function(
         function,
         payload,
-        headers,
+        headers.clone(),
         req,
         route_params,
         queries,
@@ -58,7 +58,7 @@ pub async fn handle_request(
         Err(err) => {
             println!("Error: {:?}", err);
             let mut response = HttpResponse::InternalServerError();
-            apply_headers(&mut response, headers);
+            apply_headers(&mut response, headers.clone());
             return response.finish();
         }
     };
@@ -215,7 +215,7 @@ async fn execute_middleware_function<'a>(
 async fn execute_http_function(
     function: PyFunction,
     payload: &mut web::Payload,
-    headers: &Headers,
+    headers: Arc<Py<PyTuple>>,
     req: &HttpRequest,
     route_params: HashMap<String, String>,
     queries: HashMap<String, String>,

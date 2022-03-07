@@ -7,11 +7,13 @@ use crate::shared_socket::SocketHeld;
 use crate::types::{Headers, PyFunction};
 use crate::web_socket_connection::start_web_socket;
 
+use pyo3::types::{PyDict, PyTuple};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::{Relaxed, SeqCst};
 use std::sync::{Arc, RwLock};
+
 use std::thread;
 
 use actix_files::Files;
@@ -319,7 +321,7 @@ async fn index(
         }
     }
 
-    let _ = match middleware_router.get_route("BEFORE_REQUEST", req.uri().path()) {
+    let tuple_params = match middleware_router.get_route("BEFORE_REQUEST", req.uri().path()) {
         Some(((handler_function, number_of_params), route_params)) => {
             let x = handle_middleware_request(
                 handler_function,
@@ -331,9 +333,10 @@ async fn index(
                 queries.clone(),
             )
             .await;
-            println!("{:?}", x.to_string());
+            println!("Middleware contents {:?}", x.to_string());
+            x
         }
-        None => {}
+        None => Python::with_gil(|py| PyTuple::empty(py).into_py(py)),
     };
 
     let response = match router.get_route(req.method().clone(), req.uri().path()) {
@@ -341,7 +344,7 @@ async fn index(
             handle_request(
                 handler_function,
                 number_of_params,
-                &headers,
+                Arc::new(headers),
                 &mut payload,
                 &req,
                 route_params,
